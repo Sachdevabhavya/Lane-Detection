@@ -1,51 +1,34 @@
 import os
-import numpy as np
-import tensorflow as tf
-from glob import glob
+from PIL import Image
+from torch.utils.data import Dataset
+import torchvision.transforms as T
 
-# Define constants
-IMG_HEIGHT, IMG_WIDTH = 512, 512
-BATCH_SIZE = 8
+class LaneDataset(Dataset):
+    def __init__(self, images_dir, masks_dir, image_size):
+        self.images_dir = images_dir
+        self.masks_dir = masks_dir
+        self.image_size = tuple(image_size)
+        self.images = sorted(os.listdir(images_dir))
+        self.masks = sorted(os.listdir(masks_dir))
+        self.image_transform = T.Compose([
+            T.Resize(self.image_size),
+            T.ToTensor(),
+        ])
+        self.mask_transform = T.Compose([
+            T.Resize(self.image_size, interpolation=Image.NEAREST),
+            T.PILToTensor(),
+        ])
 
-def parse_data(image_path, mask_path):
-    """
-    Reads, resizes, and normalizes image and mask.
-    """
-    image = tf.io.read_file(image_path)
-    image = tf.image.decode_png(image, channels=3)
-    image = tf.image.resize(image, [IMG_HEIGHT, IMG_WIDTH])
-    image = tf.cast(image, tf.float32) / 255.0
+    def __len__(self):
+        return len(self.images)
 
-    mask = tf.io.read_file(mask_path)
-    mask = tf.image.decode_png(mask, channels=1)
-    mask = tf.image.resize(mask, [IMG_HEIGHT, IMG_WIDTH], method='nearest')
-    mask = tf.cast(mask, tf.float32) / 255.0  
+    def __getitem__(self, idx):
+        image_path = os.path.join(self.images_dir, self.images[idx])
+        mask_path = os.path.join(self.masks_dir, self.masks[idx])
 
-    return image, mask
+        image = Image.open(image_path).convert("RGB")
+        mask = Image.open(mask_path)
 
-def load_data(train_image_dir, train_mask_dir, val_image_dir, val_mask_dir):
-    """
-    Loads training and validation datasets separately.
-    """
-    train_image_paths = sorted(glob(os.path.join(train_image_dir, "*.png")))
-    train_mask_paths = sorted(glob(os.path.join(train_mask_dir, "*.png")))
-    val_image_paths = sorted(glob(os.path.join(val_image_dir, "*.png")))
-    val_mask_paths = sorted(glob(os.path.join(val_mask_dir, "*.png")))
-
-    print(f"Training images found: {len(train_image_paths)}")
-    print(f"Training masks found: {len(train_mask_paths)}")
-    print(f"Validation images found: {len(val_image_paths)}")
-    print(f"Validation masks found: {len(val_mask_paths)}")
-
-    # Create training dataset
-    train_dataset = tf.data.Dataset.from_tensor_slices((train_image_paths, train_mask_paths))
-    train_dataset = train_dataset.map(parse_data, num_parallel_calls=tf.data.AUTOTUNE)
-    train_dataset = train_dataset.shuffle(buffer_size=len(train_image_paths), seed=42)
-    train_dataset = train_dataset.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
-
-    # Create validation dataset
-    val_dataset = tf.data.Dataset.from_tensor_slices((val_image_paths, val_mask_paths))
-    val_dataset = val_dataset.map(parse_data, num_parallel_calls=tf.data.AUTOTUNE)
-    val_dataset = val_dataset.batch(BATCH_SIZE).prefetch(tf.data.AUTOTUNE)
-
-    return train_dataset, val_dataset
+        image = self.image_transform(image)
+        mask = self.mask_transform(mask)[0].long()  # Use red channel as class ID
+        return image, mask

@@ -1,62 +1,61 @@
-import tensorflow as tf
-from tensorflow.keras import layers, models, backend as K
-from tensorflow.keras.applications import *
+import torch
+import torch.nn as nn
 
-IMG_HEIGHT, IMG_WIDTH = 512, 512
+class UNet(nn.Module):
+    def __init__(self, num_classes):
+        super(UNet, self).__init__()
 
-def dice_coef(y_true, y_pred, smooth=1):
-    """
-    Computes Dice coefficient metric.
-    """
-    y_true_f = K.flatten(y_true)
-    y_pred_f = K.flatten(y_pred)
-    intersection = K.sum(y_true_f * y_pred_f)
-    return (2. * intersection + smooth) / (K.sum(y_true_f) + K.sum(y_pred_f) + smooth)
+        def CBR(in_channels, out_channels):
+            return nn.Sequential(
+                nn.Conv2d(in_channels, out_channels, 3, padding=1),
+                nn.BatchNorm2d(out_channels),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(out_channels, out_channels, 3, padding=1),
+                nn.BatchNorm2d(out_channels),
+                nn.ReLU(inplace=True),
+            )
 
-def unet_model(input_size=(IMG_HEIGHT, IMG_WIDTH, 3)):
-    """
-    Builds the U-Net model for segmentation.
-    """
-    inputs = layers.Input(input_size)
+        self.enc1 = CBR(3, 64)
+        self.enc2 = CBR(64, 128)
+        self.enc3 = CBR(128, 256)
+        self.enc4 = CBR(256, 512)
 
-    # Encoder
-    c1 = layers.Conv2D(16, (3,3), activation='relu', padding='same')(inputs)
-    c1 = layers.Conv2D(16, (3,3), activation='relu', padding='same')(c1)
-    p1 = layers.MaxPooling2D((2,2))(c1)
+        self.pool = nn.MaxPool2d(2)
 
-    c2 = layers.Conv2D(32, (3,3), activation='relu', padding='same')(p1)
-    c2 = layers.Conv2D(32, (3,3), activation='relu', padding='same')(c2)
-    p2 = layers.MaxPooling2D((2,2))(c2)
+        self.bottleneck = CBR(512, 1024)
 
-    c3 = layers.Conv2D(64, (3,3), activation='relu', padding='same')(p2)
-    c3 = layers.Conv2D(64, (3,3), activation='relu', padding='same')(c3)
-    p3 = layers.MaxPooling2D((2,2))(c3)
+        self.upconv4 = nn.ConvTranspose2d(1024, 512, 2, stride=2)
+        self.dec4 = CBR(1024, 512)
 
-    c4 = layers.Conv2D(128, (3,3), activation='relu', padding='same')(p3)
-    c4 = layers.Conv2D(128, (3,3), activation='relu', padding='same')(c4)
-    p4 = layers.MaxPooling2D((2,2))(c4)
+        self.upconv3 = nn.ConvTranspose2d(512, 256, 2, stride=2)
+        self.dec3 = CBR(512, 256)
 
-    c5 = layers.Conv2D(256, (3,3), activation='relu', padding='same')(p4)
-    c5 = layers.Conv2D(256, (3,3), activation='relu', padding='same')(c5)
+        self.upconv2 = nn.ConvTranspose2d(256, 128, 2, stride=2)
+        self.dec2 = CBR(256, 128)
 
-    # Decoder
-    u6 = layers.Conv2DTranspose(128, (2,2), strides=(2,2), padding='same')(c5)
-    u6 = layers.concatenate([u6, c4])
-    c6 = layers.Conv2D(128, (3,3), activation='relu', padding='same')(u6)
+        self.upconv1 = nn.ConvTranspose2d(128, 64, 2, stride=2)
+        self.dec1 = CBR(128, 64)
 
-    u7 = layers.Conv2DTranspose(64, (2,2), strides=(2,2), padding='same')(c6)
-    u7 = layers.concatenate([u7, c3])
-    c7 = layers.Conv2D(64, (3,3), activation='relu', padding='same')(u7)
+        self.final = nn.Conv2d(64, num_classes, kernel_size=1)
 
-    u8 = layers.Conv2DTranspose(32, (2,2), strides=(2,2), padding='same')(c7)
-    u8 = layers.concatenate([u8, c2])
-    c8 = layers.Conv2D(32, (3,3), activation='relu', padding='same')(u8)
+    def forward(self, x):
+        enc1 = self.enc1(x)
+        enc2 = self.enc2(self.pool(enc1))
+        enc3 = self.enc3(self.pool(enc2))
+        enc4 = self.enc4(self.pool(enc3))
 
-    u9 = layers.Conv2DTranspose(16, (2,2), strides=(2,2), padding='same')(c8)
-    u9 = layers.concatenate([u9, c1])
-    c9 = layers.Conv2D(16, (3,3), activation='relu', padding='same')(u9)
+        bottleneck = self.bottleneck(self.pool(enc4))
 
-    outputs = layers.Conv2D(1, (1,1), activation='sigmoid')(c9)
+        dec4 = self.upconv4(bottleneck)
+        dec4 = self.dec4(torch.cat([dec4, enc4], dim=1))
 
-    model = models.Model(inputs=[inputs], outputs=[outputs])
-    return model
+        dec3 = self.upconv3(dec4)
+        dec3 = self.dec3(torch.cat([dec3, enc3], dim=1))
+
+        dec2 = self.upconv2(dec3)
+        dec2 = self.dec2(torch.cat([dec2, enc2], dim=1))
+
+        dec1 = self.upconv1(dec2)
+        dec1 = self.dec1(torch.cat([dec1, enc1], dim=1))
+
+        return self.final(dec1)
