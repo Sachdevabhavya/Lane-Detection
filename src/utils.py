@@ -25,7 +25,7 @@ def overlay_mask(image_tensor, mask):
     # Define class color map
     class_colors = {
         1: [255, 165, 0],     # lane - orange
-        2: [0, 255, 255],     # lane_1 - cyan
+        2: [100, 255, 100],     # lane_1 - cyan
         3: [255, 105, 180],   # lane_3 - pink
         4: [255, 192, 203],   # lane_2 - pink variant
         5: [0, 0, 139],       # my_lane - dark blue
