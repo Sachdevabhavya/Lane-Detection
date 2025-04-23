@@ -2,7 +2,11 @@ import yaml
 import torch
 import numpy as np
 import torchvision.transforms.functional as TF
-
+import matplotlib.pyplot as plt
+import pandas as pd
+import os
+import json 
+from PIL import Image
 
 def load_config(path="../config/config.yaml"):
     with open(path) as f:
@@ -13,10 +17,42 @@ def save_model(model, path):
     torch.save(model.state_dict(), path)
 
 
+def plot_metrics(metrics: dict, name: str, ylabel: str, save_dir: str):
+    plt.figure()
+    for label, values in metrics.items():
+        plt.plot(values, label=label)
+    plt.xlabel("Epoch")
+    plt.ylabel(ylabel)
+    plt.title(name)
+    plt.legend()
+    plt.grid(True)
+    plt.tight_layout()
+    os.makedirs(save_dir, exist_ok=True)
+    plt.savefig(os.path.join(save_dir, f"{name.replace(' ', '_').lower()}.png"))
+    plt.close()
+
+def save_metrics_json_csv(history: dict, json_path: str, csv_path: str):
+    # Save JSON
+    with open(json_path, 'w') as f:
+        json.dump(history, f, indent=4)
+
+    # Prepare for CSV
+    max_len = max(len(v) if isinstance(v, list) else 0 for v in history.values())
+    data = {}
+
+    for key, value in history.items():
+        if isinstance(value, list):
+            if all(isinstance(v, list) for v in value):  # per-class metrics
+                for i, sublist in enumerate(value):
+                    label = f"{key}_class_{i}"
+                    data[label] = sublist + [None] * (max_len - len(sublist))
+            else:
+                data[key] = value + [None] * (max_len - len(value))
+
+    df = pd.DataFrame(data)
+    df.to_csv(csv_path, index_label="Epoch")
+
 def overlay_mask(image_tensor, mask):
-    import torchvision.transforms.functional as TF
-    import numpy as np
-    from PIL import Image
 
     image = TF.to_pil_image(image_tensor)
     image_np = np.array(image)
