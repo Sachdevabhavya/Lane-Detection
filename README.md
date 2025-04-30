@@ -16,6 +16,18 @@ The training pipeline supports:
 pip install -r requirements.txt
 ```
 
+# Libraries used:
+1. torch==2.6.0
+2. torchvision==0.21.0
+3. numpy==1.26.4
+4. Pillow==10.2.0
+5. pyyaml==6.0.2
+6. tqdm==4.66.6
+7. matplotlib==3.8.4
+8. scikit-learn==1.5.1
+9. opencv-python==4.11.0.86
+10. pandas==2.2.3
+
 # Output
 <table>
   <tr>
