@@ -1,7 +1,7 @@
 __pycache__
 random
 data
-outputs.zip
 models
-outputs
 results
+graphs/metrics.csv
+graphs/metrics.json
